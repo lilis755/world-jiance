@@ -54,6 +54,7 @@ export class NewsPanel extends Panel {
 
   constructor(id: string, title: string) {
     super({ id, title, showCount: true, trackActivity: true });
+    this.element.classList.add('news-panel');
     this.sortMode = this.loadSortMode();
     this.createDeviationIndicator();
     this.createSortToggle();

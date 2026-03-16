@@ -17,41 +17,41 @@ export interface PanelOptions {
   closable?: boolean;
 }
 
-const PANEL_SPANS_KEY = 'worldmonitor-panel-spans';
+function getPageStorageSuffix(): string {
+  const page = new URLSearchParams(window.location.search).get('page') || 'conflicts-live';
+  return `page-${page.toLowerCase()}`;
+}
+
+function getPanelSpansKey(): string {
+  return `worldmonitor-panel-spans-${getPageStorageSuffix()}`;
+}
+
+function getPanelColSpansKey(): string {
+  return `worldmonitor-panel-col-spans-${getPageStorageSuffix()}`;
+}
 
 function loadPanelSpans(): Record<string, number> {
-  try {
-    const stored = localStorage.getItem(PANEL_SPANS_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function savePanelSpan(panelId: string, span: number): void {
   const spans = loadPanelSpans();
   spans[panelId] = span;
-  localStorage.setItem(PANEL_SPANS_KEY, JSON.stringify(spans));
+  localStorage.setItem(getPanelSpansKey(), JSON.stringify(spans));
 }
 
-const PANEL_COL_SPANS_KEY = 'worldmonitor-panel-col-spans';
 const ROW_RESIZE_STEP_PX = 80;
 const COL_RESIZE_STEP_PX = 80;
 const PANELS_GRID_MIN_TRACK_PX = 280;
 
 function loadPanelColSpans(): Record<string, number> {
-  try {
-    const stored = localStorage.getItem(PANEL_COL_SPANS_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function savePanelColSpan(panelId: string, span: number): void {
   const spans = loadPanelColSpans();
   spans[panelId] = span;
-  localStorage.setItem(PANEL_COL_SPANS_KEY, JSON.stringify(spans));
+  localStorage.setItem(getPanelColSpansKey(), JSON.stringify(spans));
 }
 
 function clearPanelColSpan(panelId: string): void {
@@ -59,10 +59,10 @@ function clearPanelColSpan(panelId: string): void {
   if (!(panelId in spans)) return;
   delete spans[panelId];
   if (Object.keys(spans).length === 0) {
-    localStorage.removeItem(PANEL_COL_SPANS_KEY);
+    localStorage.removeItem(getPanelColSpansKey());
     return;
   }
-  localStorage.setItem(PANEL_COL_SPANS_KEY, JSON.stringify(spans));
+  localStorage.setItem(getPanelColSpansKey(), JSON.stringify(spans));
 }
 
 function getDefaultColSpan(element: HTMLElement): number {
@@ -208,6 +208,8 @@ export class Panel {
     this.element = document.createElement('div');
     this.element.className = `panel ${options.className || ''}`;
     this.element.dataset.panel = options.id;
+    this.element.classList.remove('panel-wide', 'span-2', 'span-3', 'span-4', 'col-span-2', 'col-span-3');
+    this.element.classList.add('span-1', 'col-span-1');
 
     this.header = document.createElement('div');
     this.header.className = 'panel-header';
@@ -219,6 +221,21 @@ export class Panel {
     title.className = 'panel-title';
     title.textContent = options.title;
     headerLeft.appendChild(title);
+
+    const aiBtn = document.createElement('button');
+    aiBtn.className = 'panel-ai-btn';
+    aiBtn.type = 'button';
+    aiBtn.title = '加入AI上下文';
+    aiBtn.textContent = 'AI';
+    aiBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const panelTitle = title.textContent || '';
+      const contentText = (this.content?.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!contentText) return;
+      const payload = `${panelTitle}\n${contentText}`.trim();
+      document.dispatchEvent(new CustomEvent('wm:add-ai-context', { detail: { text: payload, source: this.panelId } }));
+    });
+    headerLeft.appendChild(aiBtn);
 
     if (options.infoTooltip) {
       const infoBtn = h('button', { className: 'panel-info-btn', 'aria-label': t('components.panel.showMethodologyInfo') }, '?');
@@ -943,7 +960,7 @@ export class Panel {
     this.element.classList.remove('resized', 'span-1', 'span-2', 'span-3', 'span-4');
     const spans = loadPanelSpans();
     delete spans[this.panelId];
-    localStorage.setItem(PANEL_SPANS_KEY, JSON.stringify(spans));
+    localStorage.setItem(getPanelSpansKey(), JSON.stringify(spans));
   }
 
   public resetWidth(): void {

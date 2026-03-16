@@ -63,13 +63,19 @@ export class App {
 
   private modules: { destroy(): void }[] = [];
   private unsubAiFlow: (() => void) | null = null;
+  private readonly pagePreset: string;
 
   constructor(containerId: string) {
     const el = document.getElementById(containerId);
     if (!el) throw new Error(`Container ${containerId} not found`);
 
-    const PANEL_ORDER_KEY = 'panel-order';
-    const PANEL_SPANS_KEY = 'worldmonitor-panel-spans';
+    const pagePreset = (window as unknown as { __WM_PAGE__?: string }).__WM_PAGE__ || 'conflicts-live';
+    this.pagePreset = pagePreset;
+    const storageScope = `page-${pagePreset}`;
+    const PANEL_SETTINGS_KEY = `worldmonitor-panels-${storageScope}`;
+    const PANEL_ORDER_KEY = `panel-order-${storageScope}`;
+    const PANEL_SPANS_KEY = `worldmonitor-panel-spans-${storageScope}`;
+    const PANEL_COL_SPANS_KEY = `worldmonitor-panel-col-spans-${storageScope}`;
 
     const isMobile = isMobileDevice();
     const isDesktopApp = isDesktopRuntime();
@@ -90,11 +96,12 @@ export class App {
       console.log('[App] Variant changed - resetting to defaults');
       localStorage.setItem('worldmonitor-variant', currentVariant);
       localStorage.removeItem(STORAGE_KEYS.mapLayers);
-      localStorage.removeItem(STORAGE_KEYS.panels);
+      localStorage.removeItem(PANEL_SETTINGS_KEY);
       localStorage.removeItem(PANEL_ORDER_KEY);
       localStorage.removeItem(PANEL_ORDER_KEY + '-bottom');
       localStorage.removeItem(PANEL_ORDER_KEY + '-bottom-set');
       localStorage.removeItem(PANEL_SPANS_KEY);
+      localStorage.removeItem(PANEL_COL_SPANS_KEY);
       mapLayers = sanitizeLayersForVariant({ ...defaultLayers }, currentVariant as MapVariant);
       panelSettings = { ...DEFAULT_PANELS };
     } else {
@@ -103,7 +110,7 @@ export class App {
         currentVariant as MapVariant,
       );
       panelSettings = loadFromStorage<Record<string, PanelConfig>>(
-        STORAGE_KEYS.panels,
+        PANEL_SETTINGS_KEY,
         DEFAULT_PANELS
       );
       // Merge in any new panels that didn't exist when settings were saved
@@ -160,12 +167,39 @@ export class App {
       }
     }
 
+    // Apply page presets (focused views)
+    const urlLayers = new URLSearchParams(window.location.search).get('layers');
+    if (!urlLayers && this.pagePreset === 'conflicts-live') {
+      const conflictLayers: Array<keyof MapLayers> = [
+        'conflicts',
+        'hotspots',
+        'bases',
+        'military',
+        'ais',
+        'flights',
+        'protests',
+        'ucdpEvents',
+        'iranAttacks',
+        'sanctions',
+        'gpsJamming',
+      ];
+      const nextLayers = { ...mapLayers };
+      (Object.keys(nextLayers) as Array<keyof MapLayers>).forEach((key) => { nextLayers[key] = false; });
+      conflictLayers.forEach((key) => {
+        if (key in nextLayers) nextLayers[key] = true;
+      });
+      mapLayers = sanitizeLayersForVariant(nextLayers, currentVariant as MapVariant);
+      saveToStorage(STORAGE_KEYS.mapLayers, mapLayers);
+    }
+
+    panelSettings = this.applyPagePreset(panelSettings, PANEL_SETTINGS_KEY, PANEL_ORDER_KEY);
+
     // One-time migration: enable satellite imagery panel for existing users
     const IMAGERY_PANEL_MIGRATION_KEY = 'worldmonitor-imagery-panel-enabled-v1';
     if (!localStorage.getItem(IMAGERY_PANEL_MIGRATION_KEY)) {
       if (panelSettings['satellite-imagery'] && !panelSettings['satellite-imagery'].enabled) {
         panelSettings['satellite-imagery'].enabled = true;
-        saveToStorage(STORAGE_KEYS.panels, panelSettings);
+        saveToStorage(PANEL_SETTINGS_KEY, panelSettings);
         console.log('[App] Migration: enabled satellite imagery panel');
       }
       localStorage.setItem(IMAGERY_PANEL_MIGRATION_KEY, 'done');
@@ -181,9 +215,25 @@ export class App {
         localStorage.removeItem(PANEL_ORDER_KEY + '-bottom');
         localStorage.removeItem(PANEL_ORDER_KEY + '-bottom-set');
         localStorage.removeItem(PANEL_SPANS_KEY);
+        localStorage.removeItem(PANEL_COL_SPANS_KEY);
         console.log('[App] Applied layout reset migration (v2.5): cleared panel order/spans');
       }
       localStorage.setItem(LAYOUT_RESET_MIGRATION_KEY, 'done');
+    }
+
+    // Visual layout migration: prioritize high-signal panels and hide news-heavy panels by default
+    const VISUAL_LAYOUT_MIGRATION_KEY = 'worldmonitor-layout-reset-v2.6-visual';
+    if (!localStorage.getItem(VISUAL_LAYOUT_MIGRATION_KEY)) {
+      const hiddenNewsPanels = [
+        'politics', 'us', 'europe', 'middleeast', 'africa', 'latam', 'asia',
+        'energy', 'gov', 'thinktanks',
+      ];
+      for (const key of hiddenNewsPanels) {
+        if (panelSettings[key]) panelSettings[key].enabled = false;
+      }
+      saveToStorage(PANEL_SETTINGS_KEY, panelSettings);
+      localStorage.setItem(VISUAL_LAYOUT_MIGRATION_KEY, 'done');
+      console.log('[App] Applied layout reset migration (v2.6): reordered panels + hid news-heavy panels');
     }
 
     // Desktop key management panel must always remain accessible in Tauri.
@@ -194,7 +244,7 @@ export class App {
           enabled: true,
           priority: 2,
         };
-        saveToStorage(STORAGE_KEYS.panels, panelSettings);
+        saveToStorage(PANEL_SETTINGS_KEY, panelSettings);
       }
     }
 
@@ -229,6 +279,24 @@ export class App {
         }
         localStorage.setItem(localeKey, 'done');
       }
+
+      const sourceRepairKey = 'worldmonitor-source-repair-v4';
+      if (!localStorage.getItem(sourceRepairKey)) {
+        const mustEnable = new Set([
+          'BBC World', 'Guardian World', 'France 24', 'EuroNews', 'DW News', 'AP News', 'Reuters World',
+          'BBC Middle East', 'Al Jazeera', 'Guardian ME', 'Oman Observer', 'Asharq Business', 'Asharq News', 'The National',
+          'BBC Asia', 'The Diplomat', 'South China Morning Post', 'Japan Today', 'The Hindu', 'Indian Express', 'NDTV', 'CNA',
+          'Defense One', 'Breaking Defense', 'The War Zone', 'Defense News', 'Military Times', 'USNI News', 'Task & Purpose',
+          'gCaptain', 'Foreign Policy', 'Foreign Affairs', 'Stimson Center', 'Krebs Security', 'Bellingcat',
+        ]);
+        const current = loadFromStorage<string[]>(STORAGE_KEYS.disabledFeeds, []);
+        const updated = current.filter(name => !mustEnable.has(name));
+        if (updated.length !== current.length) {
+          saveToStorage(STORAGE_KEYS.disabledFeeds, updated);
+          console.log(`[App] Source repair v4: re-enabled ${current.length - updated.length} required news/intel feeds`);
+        }
+        localStorage.setItem(sourceRepairKey, 'done');
+      }
     }
 
     const disabledSources = new Set(loadFromStorage<string[]>(STORAGE_KEYS.disabledFeeds, []));
@@ -261,6 +329,7 @@ export class App {
       findingsBadge: null,
       breakingBanner: null,
       playbackControl: null,
+      aiChatDrawer: null,
       exportPanel: null,
       unifiedSettings: null,
       pizzintIndicator: null,
@@ -282,7 +351,9 @@ export class App {
       initialLoadComplete: false,
       resolvedLocation: 'global',
       initialUrlState,
+      PANEL_SETTINGS_KEY,
       PANEL_ORDER_KEY,
+      PANEL_COL_SPANS_KEY,
       PANEL_SPANS_KEY,
     };
 
@@ -337,6 +408,173 @@ export class App {
       this.refreshScheduler,
       this.eventHandlers,
     ];
+  }
+
+  private applyPagePreset(
+    panelSettings: Record<string, PanelConfig>,
+    panelSettingsKey: string,
+    panelOrderKey: string,
+  ): Record<string, PanelConfig> {
+    const preset = (this.pagePreset || 'dashboard').toLowerCase();
+    const pageStorageSuffix = `page-${preset}`;
+    const panelSpansKey = `worldmonitor-panel-spans-${pageStorageSuffix}`;
+    const panelColSpansKey = `worldmonitor-panel-col-spans-${pageStorageSuffix}`;
+
+    const presets: Record<string, string[]> = {
+      home: Object.keys(DEFAULT_PANELS).filter((key) => key !== 'map'),
+      'conflicts-live': [
+        'scenario-brief',
+        'monitors',
+        'security-advisories',
+        'cii',
+        'strategic-risk',
+        'strategic-posture',
+        'insights',
+        'intel',
+        'gdelt-intel',
+        'live-news',
+        'live-webcams',
+        'ucdp-events',
+        'displacement',
+        'population-exposure',
+        'airline-intel',
+        'oref-sirens',
+        'politics',
+        'middleeast',
+        'europe',
+        'us',
+        'asia',
+      ],
+      'infrastructure-risk': [
+        'scenario-brief',
+        'cascade',
+        'satellite-imagery',
+        'satellite-fires',
+        'service-status',
+        'energy',
+        'supply-chain',
+        'trade-policy',
+        'economic',
+        'population-exposure',
+        'climate',
+        'live-webcams',
+        'gulf-economies',
+        'polymarket',
+        'intel',
+        'gdelt-intel',
+        'politics',
+        'middleeast',
+        'europe',
+        'asia',
+        'gov',
+        'thinktanks',
+      ],
+      'stability-report': [
+        'scenario-brief',
+        'cii',
+        'strategic-risk',
+        'strategic-posture',
+        'insights',
+        'intel',
+        'gdelt-intel',
+        'live-news',
+        'politics',
+        'polymarket',
+        'security-advisories',
+        'displacement',
+        'climate',
+        'population-exposure',
+        'economic',
+        'gov',
+        'thinktanks',
+        'monitors',
+      ],
+      'intent-warning': [
+        'scenario-brief',
+        'strategic-posture',
+        'strategic-risk',
+        'cii',
+        'security-advisories',
+        'intel',
+        'gdelt-intel',
+        'live-news',
+        'live-webcams',
+        'ucdp-events',
+        'airline-intel',
+        'oref-sirens',
+        'monitors',
+        'middleeast',
+        'europe',
+        'us',
+        'asia',
+      ],
+      simulation: [
+        'scenario-brief',
+        'politics',
+        'insights',
+        'strategic-posture',
+        'strategic-risk',
+        'cii',
+        'intel',
+        'gdelt-intel',
+        'ucdp-events',
+        'displacement',
+        'climate',
+        'economic',
+        'markets',
+        'commodities',
+        'macro-signals',
+        'polymarket',
+        'supply-chain',
+        'trade-policy',
+      ],
+      'opinion-war': [
+        'scenario-brief',
+        'live-news',
+        'politics',
+        'intel',
+        'gdelt-intel',
+        'telegram-intel',
+        'security-advisories',
+        'cii',
+        'strategic-risk',
+        'displacement',
+        'population-exposure',
+        'climate',
+        'thinktanks',
+        'gov',
+        'middleeast',
+        'europe',
+        'us',
+        'asia',
+      ],
+    };
+
+    const keys = presets[preset];
+    if (!keys || keys.length === 0) return panelSettings;
+    const hasSavedLayout =
+      Boolean(localStorage.getItem(panelSettingsKey)) ||
+      Boolean(localStorage.getItem(panelOrderKey)) ||
+      Boolean(localStorage.getItem(panelSpansKey)) ||
+      Boolean(localStorage.getItem(panelColSpansKey));
+    if (hasSavedLayout) return panelSettings;
+
+    const next: Record<string, PanelConfig> = {};
+    for (const [key, cfg] of Object.entries(panelSettings)) {
+      next[key] = { ...cfg, enabled: false };
+    }
+    keys.forEach((key) => {
+      if (next[key]) next[key].enabled = true;
+    });
+
+    try {
+      localStorage.setItem(panelOrderKey, JSON.stringify(keys.filter(k => k !== 'map')));
+      saveToStorage(panelSettingsKey, next);
+    } catch {
+      // ignore storage issues
+    }
+
+    return next;
   }
 
   public async init(): Promise<void> {

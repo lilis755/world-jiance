@@ -25,6 +25,7 @@ import {
   ServiceStatusPanel,
   RuntimeConfigPanel,
   InsightsPanel,
+  ScenarioBriefPanel,
   MacroSignalsPanel,
   ETFFlowsPanel,
   StablecoinPanel,
@@ -72,6 +73,14 @@ export class PanelLayoutManager implements AppModule {
   private criticalBannerEl: HTMLElement | null = null;
   private aviationCommandBar: AviationCommandBar | null = null;
   private readonly applyTimeRangeFilterDebounced: (() => void) & { cancel(): void };
+  private groupingMode = false;
+  private selectedPanels: Set<string> = new Set();
+  private groupViews: Array<{ id: string; name: string; panelIds: string[] }> = [];
+  private groupOverlay: HTMLElement | null = null;
+  private groupGrid: HTMLElement | null = null;
+  private groupTitleEl: HTMLElement | null = null;
+  private currentGroupViewId: string | null = null;
+  private groupPlaceholders: Map<string, { placeholder: HTMLElement; parent: HTMLElement }> = new Map();
 
   constructor(ctx: AppContext, callbacks: PanelLayoutCallbacks) {
     this.ctx = ctx;
@@ -111,9 +120,26 @@ export class PanelLayoutManager implements AppModule {
     this.ctx.panels['airline-intel']?.destroy();
 
     window.removeEventListener('resize', this.ensureCorrectZones);
+    this.groupOverlay?.remove();
+    this.groupOverlay = null;
   }
 
   renderLayout(): void {
+    const pageParam = new URLSearchParams(location.search).get('page') || 'conflicts-live';
+    const activePage = pageParam;
+    const LAYER_PRESETS: Record<string, string> = {
+      'conflicts-live': 'conflicts,hotspots,bases,military,ais,flights,protests,ucdpEvents,iranAttacks,sanctions,gpsJamming',
+      'infrastructure-risk': 'cables,pipelines,datacenters,outages,minerals,fires,waterways',
+      'stability-report': 'conflicts,protests,outages,displacement,climate,hotspots',
+      'intent-warning': 'military,flights,ais,bases,gpsJamming,hotspots,conflicts',
+      'simulation': 'conflicts,hotspots,climate,displacement,tradeRoutes,waterways',
+      'opinion-war': 'protests,conflicts,hotspots,climate',
+    };
+    const viewLink = (id: string, label: string) => {
+      const layers = LAYER_PRESETS[id] ? `&layers=${LAYER_PRESETS[id]}` : '';
+      return `<a href="?page=${id}${layers}" class="view-link ${activePage === id ? 'active' : ''}" data-view="${id}">${label}</a>`;
+    };
+
     this.ctx.container.innerHTML = `
       ${this.ctx.isDesktopApp ? '<div class="tauri-titlebar" data-tauri-drag-region></div>' : ''}
       <div class="header">
@@ -121,64 +147,14 @@ export class PanelLayoutManager implements AppModule {
           <button class="hamburger-btn" id="hamburgerBtn" aria-label="Menu">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <div class="variant-switcher">${(() => {
-        const local = this.ctx.isDesktopApp || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-        const vHref = (v: string, prod: string) => local || SITE_VARIANT === v ? '#' : prod;
-        const vTarget = (_v: string) => '';
-        return `
-            <a href="${vHref('full', 'https://worldmonitor.app')}"
-               class="variant-option ${SITE_VARIANT === 'full' ? 'active' : ''}"
-               data-variant="full"
-               ${vTarget('full')}
-               title="${t('header.world')}${SITE_VARIANT === 'full' ? ` ${t('common.currentVariant')}` : ''}">
+          <div class="variant-switcher single">
+            <span class="variant-option active" data-variant="full" title="${t('header.world')}">
               <span class="variant-icon">🌍</span>
               <span class="variant-label">${t('header.world')}</span>
-            </a>
-            <span class="variant-divider"></span>
-            <a href="${vHref('tech', 'https://tech.worldmonitor.app')}"
-               class="variant-option ${SITE_VARIANT === 'tech' ? 'active' : ''}"
-               data-variant="tech"
-               ${vTarget('tech')}
-               title="${t('header.tech')}${SITE_VARIANT === 'tech' ? ` ${t('common.currentVariant')}` : ''}">
-              <span class="variant-icon">💻</span>
-              <span class="variant-label">${t('header.tech')}</span>
-            </a>
-            <span class="variant-divider"></span>
-            <a href="${vHref('finance', 'https://finance.worldmonitor.app')}"
-               class="variant-option ${SITE_VARIANT === 'finance' ? 'active' : ''}"
-               data-variant="finance"
-               ${vTarget('finance')}
-               title="${t('header.finance')}${SITE_VARIANT === 'finance' ? ` ${t('common.currentVariant')}` : ''}">
-              <span class="variant-icon">📈</span>
-              <span class="variant-label">${t('header.finance')}</span>
-            </a>
-            ${SITE_VARIANT === 'commodity' ? `<span class="variant-divider"></span>
-            <a href="${vHref('commodity', 'https://commodity.worldmonitor.app')}"
-               class="variant-option active"
-               data-variant="commodity"
-               ${vTarget('commodity')}
-               title="${t('header.commodity')} ${t('common.currentVariant')}">
-              <span class="variant-icon">⛏️</span>
-              <span class="variant-label">${t('header.commodity')}</span>
-            </a>` : ''}
-            ${SITE_VARIANT === 'happy' ? `<span class="variant-divider"></span>
-            <a href="${vHref('happy', 'https://happy.worldmonitor.app')}"
-               class="variant-option active"
-               data-variant="happy"
-               ${vTarget('happy')}
-               title="Good News ${t('common.currentVariant')}">
-              <span class="variant-icon">☀️</span>
-              <span class="variant-label">Good News</span>
-            </a>` : ''}`;
-      })()}</div>
-          <span class="logo">MONITOR</span><span class="logo-mobile">World Monitor</span><span class="version">v${__APP_VERSION__}</span>${BETA_MODE ? '<span class="beta-badge">BETA</span>' : ''}
-          <a href="https://x.com/eliehabib" target="_blank" rel="noopener" class="credit-link">
-            <svg class="x-logo" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-            <span class="credit-text">@eliehabib</span>
-          </a>
-          <a href="https://github.com/koala73/worldmonitor" target="_blank" rel="noopener" class="github-link" title="${t('header.viewOnGitHub')}">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          </a>
+            </span>
+          </div>
+          <span class="logo">GSA</span><span class="logo-mobile">全球态势分析</span><span class="version">v${__APP_VERSION__}</span>${BETA_MODE ? '<span class="beta-badge">BETA</span>' : ''}
+          
           <button class="mobile-settings-btn" id="mobileSettingsBtn" title="${t('header.settings')}">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
@@ -203,13 +179,6 @@ export class PanelLayoutManager implements AppModule {
           </button>
         </div>
         <div class="header-right">
-          ${this.ctx.isDesktopApp ? '' : `<div class="download-wrapper" id="downloadWrapper">
-            <button class="download-btn" id="downloadBtn" title="${t('header.downloadApp')}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span id="downloadBtnLabel">${t('header.downloadApp')}</span>
-            </button>
-            <div class="download-dropdown" id="downloadDropdown"></div>
-          </div>`}
           <button class="search-btn" id="searchBtn"><kbd>⌘K</kbd> ${t('header.search')}</button>
           ${this.ctx.isDesktopApp ? '' : `<button class="copy-link-btn" id="copyLinkBtn">${t('header.copyLink')}</button>`}
           <button class="theme-toggle-btn" id="headerThemeToggle" title="${t('header.toggleTheme')}">
@@ -234,15 +203,12 @@ export class PanelLayoutManager implements AppModule {
         ${(() => {
         const variants = [
           { key: 'full', icon: '🌍', label: t('header.world') },
-          { key: 'tech', icon: '💻', label: t('header.tech') },
-          { key: 'finance', icon: '📈', label: t('header.finance') },
         ];
-        if (SITE_VARIANT === 'happy') variants.push({ key: 'happy', icon: '☀️', label: 'Good News' });
         return variants.map(v =>
-          `<button class="mobile-menu-item mobile-menu-variant ${v.key === SITE_VARIANT ? 'active' : ''}" data-variant="${v.key}">
+          `<button class="mobile-menu-item mobile-menu-variant active" data-variant="full">
             <span class="mobile-menu-item-icon">${v.icon}</span>
             <span class="mobile-menu-item-label">${v.label}</span>
-            ${v.key === SITE_VARIANT ? '<span class="mobile-menu-check">✓</span>' : ''}
+            <span class="mobile-menu-check">✓</span>
           </button>`
         ).join('');
       })()}
@@ -315,16 +281,45 @@ export class PanelLayoutManager implements AppModule {
           <div class="map-resize-handle" id="mapResizeHandle"></div>
           <div class="map-bottom-grid" id="mapBottomGrid"></div>
         </div>
-        <div class="panels-grid" id="panelsGrid"></div>
+        <div class="below-map">
+          <div class="below-map-left">
+            <div class="view-switcher map-footer-switcher">
+              ${viewLink('home', '首页')}
+              ${viewLink('conflicts-live', '冲突监控')}
+              ${viewLink('infrastructure-risk', '设施风险')}
+              ${viewLink('stability-report', '稳定评估')}
+              ${viewLink('intent-warning', '意图预警')}
+              ${viewLink('simulation', '战略推演')}
+              ${viewLink('opinion-war', '舆论监测')}
+            </div>
+            <div class="panels-scroll-shell">
+              <div class="panels-scrollbar" aria-hidden="true">
+                <div class="panels-scrollbar-track"></div>
+              </div>
+              <div class="panels-scroll-viewport" id="panelsScrollViewport">
+                <div class="panels-grid" id="panelsGrid"></div>
+              </div>
+            </div>
+          </div>
+          <div class="below-map-right">
+            <div class="map-footer-chat" id="mapFooterChat"></div>
+          </div>
+        </div>
         <button class="search-mobile-fab" id="searchMobileFab" aria-label="Search">\u{1F50D}</button>
       </div>
     `;
 
     this.createPanels();
 
+    const mainContent = this.ctx.container.querySelector('.main-content') as HTMLElement | null;
+    mainContent?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
     if (this.ctx.isMobile) {
       this.setupMobileMapToggle();
     }
+
+    this.setupGroupingUI();
   }
 
   private setupMobileMapToggle(): void {
@@ -512,6 +507,7 @@ export class PanelLayoutManager implements AppModule {
 
     this.createNewsPanel('gov', 'panels.gov');
     this.createNewsPanel('intel', 'panels.intel');
+    this.createPanel('scenario-brief', () => new ScenarioBriefPanel());
 
     this.createPanel('crypto', () => new CryptoPanel());
     this.createNewsPanel('middleeast', 'panels.middleeast');
@@ -701,6 +697,8 @@ export class PanelLayoutManager implements AppModule {
       this.ctx.panels['gulf-economies'] = new GulfEconomiesPanel();
     }
 
+    // mission-brief removed from conflict UI
+
     if (this.shouldCreatePanel('live-news')) {
       this.ctx.panels['live-news'] = new LiveNewsPanel();
     }
@@ -709,8 +707,9 @@ export class PanelLayoutManager implements AppModule {
       this.ctx.panels['live-webcams'] = new LiveWebcamsPanel();
     }
 
-    this.createPanel('events', () => new TechEventsPanel('events', () => this.ctx.allNews));
     this.createPanel('service-status', () => new ServiceStatusPanel());
+    this.createPanel('insights', () => new InsightsPanel());
+    this.createPanel('events', () => new TechEventsPanel('events', () => this.ctx.allNews));
 
     this.lazyPanel('tech-readiness', () =>
       import('@/components/TechReadinessPanel').then(m => {
@@ -728,8 +727,6 @@ export class PanelLayoutManager implements AppModule {
       const runtimeConfigPanel = new RuntimeConfigPanel({ mode: 'alert' });
       this.ctx.panels['runtime-config'] = runtimeConfigPanel;
     }
-
-    this.createPanel('insights', () => new InsightsPanel());
 
     // Global Giving panel (all variants)
     this.lazyPanel('giving', () =>
@@ -1419,5 +1416,241 @@ export class PanelLayoutManager implements AppModule {
     });
     INTEL_SOURCES.forEach(f => sources.add(f.name));
     return Array.from(sources).sort((a, b) => a.localeCompare(b));
+  }
+
+  private loadGroupViews(): void {
+    try {
+      const raw = localStorage.getItem('worldmonitor-group-views');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        this.groupViews = parsed.filter((v) => v && Array.isArray(v.panelIds));
+      }
+    } catch {
+      this.groupViews = [];
+    }
+  }
+
+  private saveGroupViews(): void {
+    try {
+      localStorage.setItem('worldmonitor-group-views', JSON.stringify(this.groupViews));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  private setupGroupingUI(): void {
+    if (this.ctx.isMobile) return;
+    this.loadGroupViews();
+    const headerRight = this.ctx.container.querySelector('.header-right');
+    if (!headerRight) return;
+    if (headerRight.querySelector('.grouping-controls')) return;
+
+    const controls = document.createElement('div');
+    controls.className = 'grouping-controls';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'grouping-btn';
+    toggleBtn.textContent = '布局';
+
+    const combineBtn = document.createElement('button');
+    combineBtn.className = 'grouping-btn';
+    combineBtn.textContent = '组合';
+
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'grouping-btn';
+    viewBtn.textContent = '视图';
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'grouping-btn ghost';
+    clearBtn.textContent = '清空';
+
+    const menu = document.createElement('div');
+    menu.className = 'grouping-menu';
+
+    const renderMenu = () => {
+      if (this.groupViews.length === 0) {
+        menu.innerHTML = '<div class="grouping-menu-empty">暂无保存视图</div>';
+        return;
+      }
+      menu.innerHTML = this.groupViews.map((view) => `
+        <div class="grouping-menu-item">
+          <button class="grouping-menu-open" data-id="${view.id}">${escapeHtml(view.name)}</button>
+          <button class="grouping-menu-delete" data-id="${view.id}">删除</button>
+        </div>
+      `).join('');
+    };
+    renderMenu();
+
+    toggleBtn.addEventListener('click', () => {
+      this.groupingMode = !this.groupingMode;
+      document.body.classList.toggle('grouping-mode', this.groupingMode);
+      toggleBtn.classList.toggle('active', this.groupingMode);
+      if (!this.groupingMode) {
+        this.clearPanelSelection();
+      } else {
+        this.ensurePanelSelectors();
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      this.clearPanelSelection();
+    });
+
+    combineBtn.addEventListener('click', () => {
+      if (this.selectedPanels.size < 2) {
+        window.alert('请至少选择两个面板进行组合。');
+        return;
+      }
+      const name = window.prompt('视图名称（可选）', '情报分析');
+      const panelIds = Array.from(this.selectedPanels);
+      if (name && name.trim()) {
+        const view = { id: `view-${Date.now()}`, name: name.trim(), panelIds };
+        this.groupViews.unshift(view);
+        this.saveGroupViews();
+        renderMenu();
+        this.openGroupView(view);
+      } else {
+        this.openGroupView({ id: 'temp', name: '临时视图', panelIds });
+      }
+    });
+
+    viewBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.classList.toggle('open');
+    });
+
+    menu.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const id = target.dataset.id;
+      if (!id) return;
+      if (target.classList.contains('grouping-menu-open')) {
+        const view = this.groupViews.find(v => v.id === id);
+        if (view) this.openGroupView(view);
+        menu.classList.remove('open');
+      }
+      if (target.classList.contains('grouping-menu-delete')) {
+        this.groupViews = this.groupViews.filter(v => v.id !== id);
+        this.saveGroupViews();
+        renderMenu();
+      }
+    });
+
+    document.addEventListener('click', () => menu.classList.remove('open'));
+
+    controls.appendChild(toggleBtn);
+    controls.appendChild(combineBtn);
+    controls.appendChild(viewBtn);
+    controls.appendChild(clearBtn);
+    controls.appendChild(menu);
+    headerRight.prepend(controls);
+  }
+
+  private ensurePanelSelectors(): void {
+    document.querySelectorAll<HTMLElement>('.panel').forEach((panel) => {
+      if (panel.querySelector('.panel-select-btn')) return;
+      const header = panel.querySelector('.panel-header');
+      if (!header) return;
+      const btn = document.createElement('button');
+      btn.className = 'panel-select-btn';
+      btn.type = 'button';
+      btn.textContent = '选';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const panelId = panel.dataset.panel;
+        if (!panelId) return;
+        if (this.selectedPanels.has(panelId)) {
+          this.selectedPanels.delete(panelId);
+          panel.classList.remove('panel-selected');
+        } else {
+          this.selectedPanels.add(panelId);
+          panel.classList.add('panel-selected');
+        }
+      });
+      header.appendChild(btn);
+    });
+  }
+
+  private clearPanelSelection(): void {
+    this.selectedPanels.clear();
+    document.querySelectorAll<HTMLElement>('.panel.panel-selected').forEach((panel) => {
+      panel.classList.remove('panel-selected');
+    });
+  }
+
+  private buildGroupOverlay(): void {
+    if (this.groupOverlay) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'group-view-overlay';
+    overlay.innerHTML = `
+      <div class="group-view-card">
+        <div class="group-view-header">
+          <div class="group-view-title"></div>
+          <div class="group-view-actions">
+            <button class="group-view-btn" data-action="delete">删除</button>
+            <button class="group-view-btn primary" data-action="close">返回</button>
+          </div>
+        </div>
+        <div class="group-view-grid"></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    this.groupOverlay = overlay;
+    this.groupGrid = overlay.querySelector('.group-view-grid') as HTMLElement;
+    this.groupTitleEl = overlay.querySelector('.group-view-title') as HTMLElement;
+
+    overlay.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target === overlay) this.closeGroupView();
+      if (target.dataset.action === 'close') this.closeGroupView();
+      if (target.dataset.action === 'delete') {
+        if (this.currentGroupViewId && this.currentGroupViewId !== 'temp') {
+          this.groupViews = this.groupViews.filter(v => v.id !== this.currentGroupViewId);
+          this.saveGroupViews();
+        }
+        this.closeGroupView();
+      }
+    });
+  }
+
+  private openGroupView(view: { id: string; name: string; panelIds: string[] }): void {
+    this.buildGroupOverlay();
+    if (!this.groupOverlay || !this.groupGrid || !this.groupTitleEl) return;
+
+    this.currentGroupViewId = view.id;
+    this.groupTitleEl.textContent = view.name;
+    this.groupGrid.innerHTML = '';
+    this.groupPlaceholders.clear();
+
+    view.panelIds.forEach((panelId) => {
+      const panel = this.ctx.panels[panelId];
+      if (!panel) return;
+      const el = panel.getElement();
+      const parent = el.parentElement;
+      if (!parent) return;
+      const placeholder = document.createElement('div');
+      placeholder.className = 'panel-placeholder';
+      parent.insertBefore(placeholder, el);
+      parent.removeChild(el);
+      this.groupPlaceholders.set(panelId, { placeholder, parent });
+      el.classList.add('group-view-panel');
+      this.groupGrid?.appendChild(el);
+    });
+
+    this.groupOverlay.classList.add('open');
+  }
+
+  private closeGroupView(): void {
+    if (!this.groupOverlay) return;
+    this.groupOverlay.classList.remove('open');
+    this.groupPlaceholders.forEach((entry, panelId) => {
+      const panel = this.ctx.panels[panelId];
+      if (!panel) return;
+      const el = panel.getElement();
+      el.classList.remove('group-view-panel');
+      entry.parent.insertBefore(el, entry.placeholder);
+      entry.placeholder.remove();
+    });
+    this.groupPlaceholders.clear();
+    this.currentGroupViewId = null;
   }
 }

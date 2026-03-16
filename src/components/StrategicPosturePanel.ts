@@ -4,6 +4,7 @@ import { fetchCachedTheaterPosture, type CachedTheaterPosture } from '@/services
 import { fetchMilitaryVessels } from '@/services/military-vessels';
 import { recalcPostureWithVessels, type TheaterPostureSummary } from '@/services/military-surge';
 import { isDesktopRuntime } from '@/services/runtime';
+import { isFeatureAvailable } from '@/services/runtime-config';
 import { t } from '../services/i18n';
 import type { NewsItem, DeductContextDetail } from '@/types';
 import { buildNewsContext } from '@/utils/news-context';
@@ -302,6 +303,15 @@ export class StrategicPosturePanel extends Panel {
 
   private showNoData(): void {
     this.stopLoadingTimer();
+    const noTrackingConfigured = isDesktopRuntime()
+      && !isFeatureAvailable('openskyRelay')
+      && !isFeatureAvailable('aisRelay');
+
+    if (noTrackingConfigured) {
+      this.showConfigError('未配置军机/军舰实时数据源。请在设置中配置 OpenSky 与 AISStream。');
+      return;
+    }
+
     this.setContent(`
       <div class="posture-panel">
         <div class="posture-no-data">

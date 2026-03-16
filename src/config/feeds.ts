@@ -721,10 +721,16 @@ const FULL_FEEDS: Record<string, Feed[]> = {
     { name: 'Island Times (Palau)', url: rss('https://islandtimes.org/feed/') },
   ],
   energy: [
-    { name: 'Oil & Gas', url: rss('https://news.google.com/rss/search?q=(oil+price+OR+OPEC+OR+"natural+gas"+OR+pipeline+OR+LNG)+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Nuclear Energy', url: rss('https://news.google.com/rss/search?q=("nuclear+energy"+OR+"nuclear+power"+OR+uranium+OR+IAEA)+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Reuters Energy', url: rss('https://news.google.com/rss/search?q=site:reuters.com+(oil+OR+gas+OR+energy+OR+OPEC)+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Mining & Resources', url: rss('https://news.google.com/rss/search?q=(lithium+OR+"rare+earth"+OR+cobalt+OR+mining)+when:3d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'OilPrice.com', url: rss('https://oilprice.com/rss/main') },
+    { name: 'Rigzone', url: rss('https://www.rigzone.com/news/rss/rigzone_latest.aspx') },
+    { name: 'EIA Reports', url: rss('https://www.eia.gov/rss/press_room.xml') },
+    { name: 'IAEA', url: rss('https://www.iaea.org/feeds/topnews') },
+    { name: 'OPEC News', url: rss('https://news.google.com/rss/search?q=(OPEC+OR+"oil+price"+OR+"crude+oil"+OR+WTI+OR+Brent+OR+"oil+production")+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Natural Gas News', url: rss('https://news.google.com/rss/search?q=("natural+gas"+OR+LNG+OR+"gas+price"+OR+"Henry+Hub")+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Energy Intel', url: rss('https://news.google.com/rss/search?q=(energy+commodities+OR+"energy+market"+OR+"energy+prices")+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Reuters Energy', url: rss('https://news.google.com/rss/search?q=site:reuters.com+(oil+OR+gas+OR+energy+OR+OPEC)+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Uranium Market', url: rss('https://news.google.com/rss/search?q=(uranium+price+OR+"uranium+market"+OR+U3O8+OR+nuclear+fuel)+when:3d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Mining & Resources', url: rss('https://news.google.com/rss/search?q=(lithium+OR+"rare+earth"+OR+cobalt+OR+copper+OR+mining)+when:3d&hl=en-US&gl=US&ceid=US:en') },
   ],
 };
 
@@ -1263,13 +1269,13 @@ export const INTEL_SOURCES: Feed[] = [
 
 // Default-enabled sources per panel (Tier 1+2 priority, ≥8 per panel)
 export const DEFAULT_ENABLED_SOURCES: Record<string, string[]> = {
-  politics: ['BBC World', 'Guardian World', 'AP News', 'Reuters World', 'CNN World'],
+  politics: ['BBC World', 'Guardian World', 'France 24', 'EuroNews', 'DW News', 'AP News', 'Reuters World', 'CNN World'],
   us: ['Reuters US', 'NPR News', 'PBS NewsHour', 'ABC News', 'CBS News', 'NBC News', 'Wall Street Journal', 'Politico', 'The Hill'],
   europe: ['France 24', 'EuroNews', 'Le Monde', 'DW News', 'Tagesschau', 'ANSA', 'NOS Nieuws', 'SVT Nyheter'],
-  middleeast: ['BBC Middle East', 'Al Jazeera', 'Al Arabiya', 'Guardian ME', 'BBC Persian', 'Iran International', 'Haaretz', 'Asharq News', 'The National'],
+  middleeast: ['BBC Middle East', 'Al Jazeera', 'Guardian ME', 'Oman Observer', 'Asharq Business', 'Asharq News', 'The National', 'Al Arabiya', 'BBC Persian', 'Iran International', 'Haaretz'],
   africa: ['BBC Africa', 'News24', 'Africanews', 'Jeune Afrique', 'Africa News', 'Premium Times', 'Channels TV', 'Sahel Crisis'],
   latam: ['BBC Latin America', 'Reuters LatAm', 'InSight Crime', 'Mexico News Daily', 'Clarín', 'Primicias', 'Infobae Americas', 'El Universo'],
-  asia: ['BBC Asia', 'The Diplomat', 'South China Morning Post', 'Reuters Asia', 'Nikkei Asia', 'CNA', 'Asia News', 'The Hindu'],
+  asia: ['BBC Asia', 'The Diplomat', 'South China Morning Post', 'Japan Today', 'The Hindu', 'Indian Express', 'NDTV', 'CNA', 'Reuters Asia', 'Nikkei Asia', 'Asia News'],
   tech: ['Hacker News', 'Ars Technica', 'The Verge', 'MIT Tech Review'],
   ai: ['AI News', 'VentureBeat AI', 'The Verge AI', 'MIT Tech Review', 'ArXiv AI'],
   finance: ['CNBC', 'MarketWatch', 'Yahoo Finance', 'Financial Times', 'Reuters Business'],
@@ -1277,12 +1283,14 @@ export const DEFAULT_ENABLED_SOURCES: Record<string, string[]> = {
   layoffs: ['Layoffs.fyi', 'TechCrunch Layoffs', 'Layoffs News'],
   thinktanks: ['Foreign Policy', 'Atlantic Council', 'Foreign Affairs', 'CSIS', 'RAND', 'Brookings', 'Carnegie', 'War on the Rocks'],
   crisis: ['CrisisWatch', 'IAEA', 'WHO', 'UNHCR'],
-  energy: ['Oil & Gas', 'Nuclear Energy', 'Reuters Energy', 'Mining & Resources'],
+  energy: ['OilPrice.com', 'Rigzone', 'EIA Reports', 'IAEA', 'OPEC News', 'Natural Gas News', 'Energy Intel', 'Reuters Energy', 'Uranium Market', 'Mining & Resources'],
 };
 
 export const DEFAULT_ENABLED_INTEL: string[] = [
   'Defense One', 'Breaking Defense', 'The War Zone', 'Defense News',
-  'Military Times', 'USNI News', 'Bellingcat', 'Krebs Security',
+  'Military Times', 'USNI News', 'Task & Purpose', 'gCaptain',
+  'Foreign Policy', 'Foreign Affairs', 'Stimson Center', 'Krebs Security',
+  'Bellingcat',
 ];
 
 export function getAllDefaultEnabledSources(): Set<string> {

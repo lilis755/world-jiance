@@ -7,6 +7,8 @@
 // ========================================================================
 
 export const UPSTREAM_TIMEOUT_MS = 25_000;
+export const GLM_API_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
+export const GLM_MODEL = 'glm-4';
 export const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 export const GROQ_MODEL = 'llama-3.1-8b-instant';
 

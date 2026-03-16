@@ -10,6 +10,7 @@ import {
   PizzIntIndicator,
   CIIPanel,
   PredictionPanel,
+  AiChatDrawer,
 } from '@/components';
 import {
   buildMapUrl,
@@ -28,7 +29,6 @@ import {
   INTEL_SOURCES,
   DEFAULT_PANELS,
 } from '@/config';
-import { VARIANT_META } from '@/config/variant-meta';
 import {
   saveSnapshot,
   initAisStream,
@@ -36,7 +36,6 @@ import {
 } from '@/services';
 import {
   trackPanelView,
-  trackVariantSwitch,
   trackThemeChanged,
   trackMapViewChange,
   trackMapLayerToggle,
@@ -86,6 +85,7 @@ export class EventHandlerManager implements AppModule {
   private boundMapFullscreenEscHandler: ((e: KeyboardEvent) => void) | null = null;
   private boundMobileMenuKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private boundPanelCloseHandler: ((e: Event) => void) | null = null;
+  private aiChatRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private snapshotIntervalId: ReturnType<typeof setInterval> | null = null;
   private clockIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -223,6 +223,8 @@ export class EventHandlerManager implements AppModule {
       document.removeEventListener('visibilitychange', this.boundMapResizeVisChangeHandler);
       this.boundMapResizeVisChangeHandler = null;
     }
+    this.ctx.aiChatDrawer?.destroy();
+    this.ctx.aiChatDrawer = null;
     if (this.boundMapFullscreenEscHandler) {
       document.removeEventListener('keydown', this.boundMapFullscreenEscHandler);
       this.boundMapFullscreenEscHandler = null;
@@ -234,6 +236,10 @@ export class EventHandlerManager implements AppModule {
     if (this.boundPanelCloseHandler) {
       this.ctx.container.removeEventListener('wm:panel-close', this.boundPanelCloseHandler);
       this.boundPanelCloseHandler = null;
+    }
+    if (this.aiChatRetryTimer) {
+      clearTimeout(this.aiChatRetryTimer);
+      this.aiChatRetryTimer = null;
     }
     this.ctx.tvMode?.destroy();
     this.ctx.tvMode = null;
@@ -249,6 +255,8 @@ export class EventHandlerManager implements AppModule {
     document.getElementById('searchBtn')?.addEventListener('click', openSearch);
     document.getElementById('mobileSearchBtn')?.addEventListener('click', openSearch);
     document.getElementById('searchMobileFab')?.addEventListener('click', openSearch);
+
+    this.setupAiChatDrawer();
 
     document.getElementById('copyLinkBtn')?.addEventListener('click', async () => {
       const shareUrl = this.getShareUrl();
@@ -266,7 +274,7 @@ export class EventHandlerManager implements AppModule {
     this.initDownloadDropdown();
 
     this.boundStorageHandler = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.panels && e.newValue) {
+      if (e.key === this.ctx.PANEL_SETTINGS_KEY && e.newValue) {
         try {
           this.ctx.panelSettings = JSON.parse(e.newValue) as Record<string, PanelConfig>;
           this.applyPanelSettings();
@@ -289,7 +297,7 @@ export class EventHandlerManager implements AppModule {
       if (!config) return;
       config.enabled = false;
       trackPanelToggled(panelId, false);
-      saveToStorage(STORAGE_KEYS.panels, this.ctx.panelSettings);
+      saveToStorage(this.ctx.PANEL_SETTINGS_KEY, this.ctx.panelSettings);
       this.applyPanelSettings();
       this.ctx.unifiedSettings?.refreshPanelToggles();
     }) as EventListener;
@@ -302,16 +310,11 @@ export class EventHandlerManager implements AppModule {
       trackThemeChanged(next);
     });
 
-    const isLocalDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     this.ctx.container.querySelectorAll<HTMLAnchorElement>('.variant-option').forEach(link => {
       link.addEventListener('click', (e) => {
         const variant = link.dataset.variant;
         if (!variant || variant === SITE_VARIANT) return;
         e.preventDefault();
-        void this.navigateToVariant(variant, {
-          href: link.href,
-          isLocalDev,
-        });
       });
     });
 
@@ -400,6 +403,45 @@ export class EventHandlerManager implements AppModule {
     }
   }
 
+  private setupAiChatDrawer(): void {
+    if (this.ctx.isMobile) return;
+    const mount = this.ctx.container.querySelector('#mapFooterChat');
+    if (!mount) return;
+    const mountEl = mount as HTMLElement;
+    mountEl.classList.add('loading');
+
+    if (!this.ctx.aiChatDrawer) {
+      try {
+        this.ctx.aiChatDrawer = new AiChatDrawer();
+      } catch (error) {
+        console.error('[AI Chat] Failed to construct AI sidebar:', error);
+        this.scheduleAiChatRetry();
+        return;
+      }
+    }
+
+    if (!mountEl.querySelector('.ai-chat-panel')) {
+      try {
+        this.ctx.aiChatDrawer.mount(mountEl);
+      } catch (error) {
+        console.error('[AI Chat] Failed to mount AI sidebar:', error);
+        this.scheduleAiChatRetry();
+        return;
+      }
+    }
+
+    mountEl.classList.remove('loading');
+    mountEl.dataset.ready = '1';
+  }
+
+  private scheduleAiChatRetry(): void {
+    if (this.aiChatRetryTimer) clearTimeout(this.aiChatRetryTimer);
+    this.aiChatRetryTimer = setTimeout(() => {
+      this.aiChatRetryTimer = null;
+      this.setupAiChatDrawer();
+    }, 250);
+  }
+
   private setupMobileMenu(): void {
     const hamburger = document.getElementById('hamburgerBtn');
     const overlay = document.getElementById('mobileMenuOverlay');
@@ -411,12 +453,10 @@ export class EventHandlerManager implements AppModule {
     overlay.addEventListener('click', () => this.closeMobileMenu());
     closeBtn.addEventListener('click', () => this.closeMobileMenu());
 
-    const isLocalDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     menu.querySelectorAll<HTMLButtonElement>('.mobile-menu-variant').forEach(btn => {
       btn.addEventListener('click', () => {
         const variant = btn.dataset.variant;
         if (!variant || variant === SITE_VARIANT) return;
-        void this.navigateToVariant(variant, { isLocalDev });
       });
     });
 
@@ -694,35 +734,6 @@ export class EventHandlerManager implements AppModule {
     };
   }
 
-  private async exitFullscreenForNavigation(): Promise<void> {
-    const fullscreenDocument = this.getFullscreenDocument();
-    if (!fullscreenDocument.fullscreenElement && !fullscreenDocument.webkitFullscreenElement) return;
-    try {
-      if (typeof fullscreenDocument.exitFullscreen === 'function') {
-        await fullscreenDocument.exitFullscreen();
-        return;
-      }
-      await fullscreenDocument.webkitExitFullscreen?.();
-    } catch { /* proceed with navigation regardless */ }
-  }
-
-  private async navigateToVariant(
-    variant: string,
-    options: { href?: string; isLocalDev: boolean },
-  ): Promise<void> {
-    trackVariantSwitch(SITE_VARIANT, variant);
-    await this.exitFullscreenForNavigation();
-
-    if (this.ctx.isDesktopApp || options.isLocalDev) {
-      localStorage.setItem('worldmonitor-variant', variant);
-      window.location.reload();
-      return;
-    }
-
-    const target = options.href || VARIANT_META[variant]?.url;
-    if (target) window.location.href = target;
-  }
-
   toggleFullscreen(): void {
     const fullscreenDocument = this.getFullscreenDocument();
     if (fullscreenDocument.fullscreenElement || fullscreenDocument.webkitFullscreenElement) {
@@ -815,7 +826,7 @@ export class EventHandlerManager implements AppModule {
           }
           Object.assign(current, nextConfig);
         });
-        saveToStorage(STORAGE_KEYS.panels, this.ctx.panelSettings);
+        saveToStorage(this.ctx.PANEL_SETTINGS_KEY, this.ctx.panelSettings);
         this.applyPanelSettings();
       },
       getDisabledSources: () => this.ctx.disabledSources,
@@ -838,7 +849,7 @@ export class EventHandlerManager implements AppModule {
       getLocalizedPanelName: (key: string, fallback: string) => this.getLocalizedPanelName(key, fallback),
       resetLayout: () => {
         localStorage.removeItem(this.ctx.PANEL_SPANS_KEY);
-        localStorage.removeItem('worldmonitor-panel-col-spans');
+        localStorage.removeItem(this.ctx.PANEL_COL_SPANS_KEY);
         localStorage.removeItem(this.ctx.PANEL_ORDER_KEY);
         localStorage.removeItem(this.ctx.PANEL_ORDER_KEY + '-bottom');
         localStorage.removeItem(this.ctx.PANEL_ORDER_KEY + '-bottom-set');

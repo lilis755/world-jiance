@@ -42,7 +42,7 @@ export class ServiceStatusPanel extends Panel {
   private localBackend: LocalBackendStatus | null = null;
 
   constructor() {
-    super({ id: 'service-status', title: t('panels.serviceStatus'), showCount: false });
+    super({ id: 'service-status', title: t('panels.serviceStatus'), showCount: false, className: 'panel-wide span-2' });
     void this.fetchStatus();
   }
 

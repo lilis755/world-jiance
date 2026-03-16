@@ -2,6 +2,8 @@ import { getApiBaseUrl, isDesktopRuntime } from './runtime';
 import { invokeTauri } from './tauri-bridge';
 
 export type RuntimeSecretKey =
+  | 'GLM_API_KEY'
+  | 'GLM_MODEL'
   | 'GROQ_API_KEY'
   | 'OPENROUTER_API_KEY'
   | 'TAVILY_API_KEYS'
@@ -31,6 +33,7 @@ export type RuntimeSecretKey =
   | 'ICAO_API_KEY';
 
 export type RuntimeFeatureId =
+  | 'aiGlm'
   | 'aiGroq'
   | 'aiOpenRouter'
   | 'stockNewsSearchTavily'
@@ -88,6 +91,7 @@ function getSidecarSecretValidateUrl(): string {
 }
 
 const defaultToggles: Record<RuntimeFeatureId, boolean> = {
+  aiGlm: true,
   aiGroq: true,
   aiOpenRouter: true,
   stockNewsSearchTavily: true,
@@ -110,12 +114,19 @@ const defaultToggles: Record<RuntimeFeatureId, boolean> = {
   aiOllama: true,
   wtoTrade: true,
   supplyChain: true,
-  newsPerFeedFallback: false,
+  newsPerFeedFallback: true,
   aviationStack: true,
   icaoNotams: true,
 };
 
 export const RUNTIME_FEATURES: RuntimeFeatureDefinition[] = [
+  {
+    id: 'aiGlm',
+    name: 'GLM summarization',
+    description: 'Primary GLM provider used for AI summaries, dialogue, and intelligence briefs.',
+    requiredSecrets: ['GLM_API_KEY'],
+    fallback: 'Falls back to Ollama, then Groq, then OpenRouter, then local browser model.',
+  },
   {
     id: 'aiOllama',
     name: 'Ollama local summarization',

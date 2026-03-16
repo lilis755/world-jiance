@@ -52,10 +52,10 @@ export async function fetchPredictions(): Promise<PredictionMarket[]> {
   return breaker.execute(async () => {
     // Strategy 1: Bootstrap hydration (zero network cost — data arrived with page load)
     const hydrated = getHydratedData('predictions') as BootstrapPredictionData | undefined;
+    const hydratedVariant = SITE_VARIANT === 'tech' ? hydrated?.tech : hydrated?.geopolitical;
     if (hydrated && hydrated.fetchedAt && Date.now() - hydrated.fetchedAt < 20 * 60 * 1000) {
-      const variant = SITE_VARIANT === 'tech' ? hydrated.tech : hydrated.geopolitical;
-      if (variant && variant.length > 0) {
-        return variant.filter(m => !isExpired(m.endDate)).slice(0, 15);
+      if (hydratedVariant && hydratedVariant.length > 0) {
+        return hydratedVariant.filter(m => !isExpired(m.endDate)).slice(0, 15);
       }
     }
 
@@ -68,15 +68,27 @@ export async function fetchPredictions(): Promise<PredictionMarket[]> {
       cursor: '',
     });
     if (rpcResults.markets && rpcResults.markets.length > 0) {
-      return rpcResults.markets
+      const allMarkets = rpcResults.markets
         .map(protoToMarket)
         .filter(m => !isExpired(m.endDate))
+        .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+
+      const filteredMarkets = allMarkets
         .filter(m => {
           const discrepancy = Math.abs(m.yesPrice - 50);
           return discrepancy > 5 || (m.volume && m.volume > 50000);
         })
-        .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
         .slice(0, 15);
+
+      if (filteredMarkets.length > 0) {
+        return filteredMarkets;
+      }
+
+      return allMarkets.slice(0, 15);
+    }
+
+    if (hydratedVariant && hydratedVariant.length > 0) {
+      return hydratedVariant.filter(m => !isExpired(m.endDate)).slice(0, 15);
     }
 
     throw new Error('No markets returned — upstream may be down');

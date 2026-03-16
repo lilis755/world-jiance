@@ -63,6 +63,10 @@ async function ensureLanguageLoaded(lng: string): Promise<SupportedLanguage> {
 
 // Initialize i18n
 export async function initI18n(): Promise<void> {
+  try {
+    const hasLang = !!localStorage.getItem('i18nextLng');
+    if (!hasLang) localStorage.setItem('i18nextLng', 'zh');
+  } catch { /* ignore storage errors */ }
   if (i18next.isInitialized) {
     const currentLanguage = normalizeLanguage(i18next.language || 'en');
     await ensureLanguageLoaded(currentLanguage);
@@ -80,7 +84,7 @@ export async function initI18n(): Promise<void> {
       },
       supportedLngs: [...SUPPORTED_LANGUAGES],
       nonExplicitSupportedLngs: true,
-      fallbackLng: 'en',
+      fallbackLng: 'zh',
       debug: import.meta.env.DEV,
       interpolation: {
         escapeValue: false, // not needed for these simple strings

@@ -2,12 +2,15 @@ import type { NewsItem, Monitor, PanelConfig, MapLayers, InternetOutage, SocialU
 import type { AirportDelayAlert, PositionSample } from '@/services/aviation';
 import type { IranEvent } from '@/generated/client/worldmonitor/conflict/v1/service_client';
 import type { SecurityAdvisory } from '@/services/security-advisories';
-import type { MapContainer, Panel, NewsPanel, SignalModal, StatusPanel, SearchModal } from '@/components';
+import type { ClimateAnomaly } from '@/services/climate';
+import type { FireDetection } from '@/services/wildfires';
+import type { MapContainer, Panel, NewsPanel, SignalModal, StatusPanel, SearchModal, AiChatDrawer } from '@/components';
 import type { IntelligenceGapBadge } from '@/components';
 import type { MarketData, ClusteredEvent } from '@/types';
 import type { PredictionMarket } from '@/services/prediction';
 import type { TimeRange } from '@/components';
 import type { Earthquake } from '@/services/earthquakes';
+import type { NaturalEvent } from '@/types';
 import type { CountryBriefPanel } from '@/components/CountryBriefPanel';
 import type { CountryTimeline } from '@/components/CountryTimeline';
 import type { PlaybackControl } from '@/components';
@@ -57,6 +60,9 @@ export interface IntelligenceCache {
   protests?: { events: SocialUnrestEvent[]; sources: { acled: number; gdelt: number } };
   military?: { flights: MilitaryFlight[]; flightClusters: MilitaryFlightCluster[]; vessels: MilitaryVessel[]; vesselClusters: MilitaryVesselCluster[] };
   earthquakes?: Earthquake[];
+  climateAnomalies?: ClimateAnomaly[];
+  naturalEvents?: NaturalEvent[];
+  satelliteFires?: FireDetection[];
   usniFleet?: USNIFleetReport;
   iranEvents?: IranEvent[];
   orefAlerts?: { alertCount: number; historyCount24h: number };
@@ -102,6 +108,7 @@ export interface AppContext {
   findingsBadge: IntelligenceGapBadge | null;
   breakingBanner: BreakingNewsBanner | null;
   playbackControl: PlaybackControl | null;
+  aiChatDrawer: AiChatDrawer | null;
   exportPanel: ExportPanel | null;
   unifiedSettings: UnifiedSettings | null;
   pizzintIndicator: PizzIntIndicator | null;
@@ -126,6 +133,8 @@ export interface AppContext {
   resolvedLocation: 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
 
   initialUrlState: ParsedMapUrlState | null;
+  readonly PANEL_SETTINGS_KEY: string;
   readonly PANEL_ORDER_KEY: string;
+  readonly PANEL_COL_SPANS_KEY: string;
   readonly PANEL_SPANS_KEY: string;
 }

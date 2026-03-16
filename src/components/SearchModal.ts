@@ -592,6 +592,7 @@ export class SearchModal {
     });
   }
 
+
   private renderChips(query?: string): void {
     if (!this.chipsContainer) return;
     if (query && query.length >= 1) {

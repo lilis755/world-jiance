@@ -7,7 +7,7 @@ import type {
 
 import { cachedFetchJson } from '../../../_shared/redis';
 import { markNoCacheResponse } from '../../../_shared/response-headers';
-import { UPSTREAM_TIMEOUT_MS, GROQ_API_URL, GROQ_MODEL, sha256Hex } from './_shared';
+import { UPSTREAM_TIMEOUT_MS, GLM_API_URL, GLM_MODEL, GROQ_API_URL, GROQ_MODEL, sha256Hex } from './_shared';
 import { CHROME_UA } from '../../../_shared/constants';
 
 // ========================================================================
@@ -40,7 +40,8 @@ export async function classifyEvent(
   ctx: ServerContext,
   req: ClassifyEventRequest,
 ): Promise<ClassifyEventResponse> {
-  const apiKey = process.env.LLM_API_KEY || process.env.GROQ_API_KEY;
+  const usingGlm = Boolean(process.env.GLM_API_KEY);
+  const apiKey = process.env.GLM_API_KEY || process.env.LLM_API_KEY || process.env.GROQ_API_KEY;
   if (!apiKey) { markNoCacheResponse(ctx.request); return { classification: undefined }; }
 
   // Input sanitization (M-14 fix): limit title length
@@ -48,8 +49,12 @@ export async function classifyEvent(
   const title = typeof req.title === 'string' ? req.title.slice(0, MAX_TITLE_LEN) : '';
   if (!title) { markNoCacheResponse(ctx.request); return { classification: undefined }; }
 
-  const apiUrl = process.env.LLM_API_URL || GROQ_API_URL;
-  const model = process.env.LLM_MODEL || GROQ_MODEL;
+  const apiUrl = usingGlm
+    ? (process.env.GLM_API_URL || process.env.LLM_API_URL || GLM_API_URL)
+    : (process.env.LLM_API_URL || GROQ_API_URL);
+  const model = usingGlm
+    ? (process.env.GLM_MODEL || process.env.LLM_MODEL || GLM_MODEL)
+    : (process.env.LLM_MODEL || GROQ_MODEL);
 
   const cacheKey = `classify:sebuf:v1:${(await sha256Hex(title.toLowerCase())).slice(0, 16)}`;
 

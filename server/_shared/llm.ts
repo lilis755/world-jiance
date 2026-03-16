@@ -17,6 +17,19 @@ function isSidecar(): boolean {
 }
 
 export function getProviderCredentials(provider: string): ProviderCredentials | null {
+  if (provider === 'glm') {
+    const apiKey = process.env.GLM_API_KEY;
+    if (!apiKey) return null;
+    return {
+      apiUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      model: process.env.GLM_MODEL || 'glm-4',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    };
+  }
+
   if (provider === 'ollama') {
     const baseUrl = process.env.OLLAMA_API_URL;
     if (!baseUrl) return null;
@@ -96,7 +109,7 @@ export function stripThinkingTags(text: string): string {
   return s;
 }
 
-const PROVIDER_CHAIN = ['ollama', 'groq', 'openrouter'] as const;
+const PROVIDER_CHAIN = ['glm', 'ollama', 'groq', 'openrouter'] as const;
 
 export interface LlmCallOptions {
   messages: Array<{ role: string; content: string }>;

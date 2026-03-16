@@ -7,6 +7,10 @@ import { App } from './App';
 import { installUtmInterceptor } from './utils/utm';
 
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN?.trim();
+const params = new URLSearchParams(window.location.search);
+const page = (params.get('page') || 'conflicts-live').toLowerCase();
+(window as unknown as { __WM_PAGE__?: string }).__WM_PAGE__ = page;
+document.body.dataset.page = page;
 
 // Initialize Sentry error tracking (early as possible)
 Sentry.init({

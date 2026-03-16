@@ -170,6 +170,10 @@ export async function fetchGdeltArticles(
 
   if (resp.error) {
     console.warn(`[GDELT-Intel] RPC error: ${resp.error}`);
+    const breakerCached = gdeltBreaker.getCached();
+    if (breakerCached?.articles?.length) {
+      return breakerCached.articles.map(toGdeltArticle);
+    }
     return cached?.articles || [];
   }
 
@@ -185,7 +189,14 @@ export async function fetchHotspotContext(hotspot: Hotspot): Promise<GdeltArticl
 }
 
 export async function fetchTopicIntelligence(topic: IntelTopic): Promise<TopicIntelligence> {
-  const articles = await fetchGdeltArticles(topic.query, 10, '24h');
+  let articles = await fetchGdeltArticles(topic.query, 10, '24h');
+  if (articles.length === 0) {
+    articles = await fetchGdeltArticles(topic.query, 10, '72h');
+  }
+  if (articles.length === 0 && topic.query.includes('sourcelang:eng')) {
+    const relaxedQuery = topic.query.replace(/\s*sourcelang:eng/g, '').trim();
+    articles = await fetchGdeltArticles(relaxedQuery, 10, '7d');
+  }
   return {
     topic,
     articles,
@@ -263,6 +274,10 @@ export async function fetchPositiveGdeltArticles(
 
   if (resp.error) {
     console.warn(`[GDELT-Intel] Positive RPC error: ${resp.error}`);
+    const breakerCached = positiveGdeltBreaker.getCached();
+    if (breakerCached?.articles?.length) {
+      return breakerCached.articles.map(toGdeltArticle);
+    }
     return cached?.articles || [];
   }
 

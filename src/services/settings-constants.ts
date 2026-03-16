@@ -1,6 +1,8 @@
 import type { RuntimeSecretKey, RuntimeFeatureId } from './runtime-config';
 
 export const SIGNUP_URLS: Partial<Record<RuntimeSecretKey, string>> = {
+  GLM_API_KEY: 'https://open.bigmodel.cn/',
+  GLM_MODEL: 'https://open.bigmodel.cn/',
   GROQ_API_KEY: 'https://console.groq.com/keys',
   OPENROUTER_API_KEY: 'https://openrouter.ai/settings/keys',
   TAVILY_API_KEYS: 'https://app.tavily.com/home',
@@ -28,6 +30,7 @@ export const SIGNUP_URLS: Partial<Record<RuntimeSecretKey, string>> = {
 };
 
 export const PLAINTEXT_KEYS = new Set<RuntimeSecretKey>([
+  'GLM_MODEL',
   'OLLAMA_API_URL',
   'OLLAMA_MODEL',
   'WS_RELAY_URL',
@@ -37,6 +40,8 @@ export const PLAINTEXT_KEYS = new Set<RuntimeSecretKey>([
 export const MASKED_SENTINEL = '__WM_MASKED__';
 
 export const HUMAN_LABELS: Record<RuntimeSecretKey, string> = {
+  GLM_API_KEY: 'GLM API Key',
+  GLM_MODEL: 'GLM Model',
   GROQ_API_KEY: 'Groq API Key',
   OPENROUTER_API_KEY: 'OpenRouter API Key',
   TAVILY_API_KEYS: 'Tavily API Keys',
@@ -76,7 +81,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   {
     id: 'ai',
     label: 'AI & Summarization',
-    features: ['aiOllama', 'aiGroq', 'aiOpenRouter'],
+    features: ['aiGlm', 'aiOllama', 'aiGroq', 'aiOpenRouter'],
   },
   {
     id: 'economy',
