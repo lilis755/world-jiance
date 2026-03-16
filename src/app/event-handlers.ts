@@ -50,6 +50,7 @@ import { mlWorker } from '@/services/ml-worker';
 import { UnifiedSettings } from '@/components/UnifiedSettings';
 import { t } from '@/services/i18n';
 import { TvModeController } from '@/services/tv-mode';
+import { syncCurrentPageContext } from '@/utils/page-context';
 
 export interface EventHandlerCallbacks {
   updateSearchIndex: () => void;
@@ -601,12 +602,14 @@ export class EventHandlerManager implements AppModule {
 
   getShareUrl(): string | null {
     if (!this.ctx.map) return null;
+    const page = syncCurrentPageContext();
     const state = this.ctx.map.getState();
     const center = this.ctx.map.getCenter();
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
     const briefPage = this.ctx.countryBriefPage;
     const isCountryVisible = briefPage?.isVisible() ?? false;
     return buildMapUrl(baseUrl, {
+      page,
       view: state.view,
       zoom: state.zoom,
       center,

@@ -1,20 +1,14 @@
 import { IntelligenceServiceClient } from '@/generated/client/worldmonitor/intelligence/v1/service_client';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { getCurrentPageId, type PageId } from '@/utils/page-context';
 
 const client = new IntelligenceServiceClient('', { fetch: (...args) => globalThis.fetch(...args) });
 
 const MAX_CONTEXT_CHARS = 3500;
 const MAX_HISTORY_MESSAGES = 6;
 
-type ScenarioId =
-  | 'home'
-  | 'conflicts-live'
-  | 'infrastructure-risk'
-  | 'stability-report'
-  | 'intent-warning'
-  | 'simulation'
-  | 'opinion-war';
+type ScenarioId = PageId;
 
 interface AiChatMessage {
   role: 'user' | 'assistant';
@@ -78,9 +72,7 @@ const SCENARIO_BRIEF_META: Record<ScenarioId, { title: string; hint: string; pro
 };
 
 function getScenarioId(): ScenarioId {
-  const page = new URLSearchParams(window.location.search).get('page') || 'conflicts-live';
-  const normalized = (page === 'home' ? 'home' : page) as ScenarioId;
-  return SCENARIO_LABELS[normalized] ? normalized : 'conflicts-live';
+  return getCurrentPageId();
 }
 
 function collectActiveLayers(): string[] {
@@ -92,13 +84,21 @@ function collectActiveLayers(): string[] {
 }
 
 function collectPanelContext(): string {
-  const panels = Array.from(document.querySelectorAll('.panel')) as HTMLElement[];
+  const roots = [
+    document.getElementById('panelsGrid'),
+    document.getElementById('mapBottomGrid'),
+  ].filter((root): root is HTMLElement => Boolean(root));
+  const panels = roots.flatMap((root) =>
+    Array.from(root.querySelectorAll('.panel')) as HTMLElement[],
+  );
   const parts: string[] = [];
 
   for (const panel of panels) {
     const panelId = panel.dataset.panel;
     if (!panelId || panelId === 'map') continue;
     if (panel.closest('.group-view-overlay')) continue;
+    if (panel.classList.contains('hidden')) continue;
+    if (panel.getClientRects().length === 0) continue;
     const title = panel.querySelector('.panel-title')?.textContent?.trim() || panelId;
     const text = panel.querySelector('.panel-content')?.textContent?.trim();
     if (!text) continue;

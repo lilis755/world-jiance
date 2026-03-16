@@ -128,6 +128,7 @@ export function parseMapUrlState(
 export function buildMapUrl(
   baseUrl: string,
   state: {
+    page?: string;
     view: MapView;
     zoom: number;
     center?: { lat: number; lon: number } | null;
@@ -139,6 +140,10 @@ export function buildMapUrl(
 ): string {
   const url = new URL(baseUrl);
   const params = new URLSearchParams();
+
+  if (state.page) {
+    params.set('page', state.page);
+  }
 
   if (state.center) {
     params.set('lat', state.center.lat.toFixed(4));

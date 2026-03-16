@@ -42,6 +42,7 @@ import { DataLoaderManager } from '@/app/data-loader';
 import { EventHandlerManager } from '@/app/event-handlers';
 import { resolveUserRegion, resolvePreciseUserCoordinates, type PreciseCoordinates } from '@/utils/user-location';
 import { showProBanner } from '@/components/ProBanner';
+import { getCurrentPageId, syncCurrentPageContext } from '@/utils/page-context';
 
 const CYBER_LAYER_ENABLED = import.meta.env.VITE_ENABLE_CYBER_LAYER === 'true';
 
@@ -69,7 +70,8 @@ export class App {
     const el = document.getElementById(containerId);
     if (!el) throw new Error(`Container ${containerId} not found`);
 
-    const pagePreset = (window as unknown as { __WM_PAGE__?: string }).__WM_PAGE__ || 'conflicts-live';
+    const pagePreset = getCurrentPageId();
+    syncCurrentPageContext();
     this.pagePreset = pagePreset;
     const storageScope = `page-${pagePreset}`;
     const PANEL_SETTINGS_KEY = `worldmonitor-panels-${storageScope}`;

@@ -1,14 +1,8 @@
 import { Panel } from './Panel';
 import { h, replaceChildren } from '@/utils/dom-utils';
+import { getCurrentPageId, type PageId } from '@/utils/page-context';
 
-type ScenarioId =
-  | 'home'
-  | 'conflicts-live'
-  | 'infrastructure-risk'
-  | 'stability-report'
-  | 'intent-warning'
-  | 'simulation'
-  | 'opinion-war';
+type ScenarioId = PageId;
 
 const SCENARIO_CONFIG: Record<ScenarioId, { title: string; subtitle: string; bullets: string[]; prompt: string }> = {
   home: {
@@ -98,9 +92,7 @@ const SCENARIO_CONFIG: Record<ScenarioId, { title: string; subtitle: string; bul
 };
 
 function getScenarioId(): ScenarioId {
-  const page = new URLSearchParams(window.location.search).get('page') || 'conflicts-live';
-  const normalized = (page === 'home' ? 'home' : page) as ScenarioId;
-  return SCENARIO_CONFIG[normalized] ? normalized : 'conflicts-live';
+  return getCurrentPageId();
 }
 
 function collectActiveLayers(): string[] {
